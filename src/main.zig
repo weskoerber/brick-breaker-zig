@@ -174,12 +174,14 @@ const Game = struct {
         self.ball.rect.y = std.math.clamp(self.ball.rect.y, 0, self.options.width - self.ball.rect.h);
 
         // Bounce the ball off the wall
-        std.debug.print("{}\n", .{self.ball});
-
         if (self.ball.rect.x == self.options.width - self.ball.rect.w or self.ball.rect.x == 0) {
             self.ball.dx *= -1;
         }
         if (self.ball.rect.y == self.options.height - self.ball.rect.h or self.ball.rect.y == 0) {
+            self.ball.dy *= -1;
+        }
+
+        if (Sdl.SDL_HasIntersection(&self.bar.rect, &self.ball.rect) == 1) {
             self.ball.dy *= -1;
         }
     }
