@@ -13,11 +13,32 @@ const Game = struct {
     const State = struct {
         running: bool,
         started: bool,
+        bricks: std.ArrayList(Brick),
 
-        pub fn init() State {
+        pub fn init() !State {
+            const num = @divTrunc(Options.default_width, Brick.default_width + Brick.default_padding);
+
+            var bricklist = std.ArrayList(Brick).init(std.heap.page_allocator);
+            try bricklist.ensureTotalCapacity(num);
+
+            const rows = 3;
+            std.log.debug("Initializing {d} bricks\n", .{num * rows});
+            var posY: u32 = Brick.default_padding;
+            var posX: u32 = Brick.default_padding;
+            for (0..rows) |_| {
+                for (0..num) |_| {
+                    try bricklist.append(Brick.init(posX, posY));
+                    posX += Brick.default_width + Brick.default_padding;
+                }
+
+                posY += Brick.default_height + Brick.default_padding;
+                posX = Brick.default_padding;
+            }
+
             return .{
                 .running = true,
                 .started = false,
+                .bricks = bricklist,
             };
         }
     };
@@ -87,6 +108,29 @@ const Game = struct {
         }
     };
 
+    const Brick = struct {
+        color: Sdl.SDL_Color,
+        rect: Sdl.SDL_Rect,
+        alive: bool,
+
+        const default_width = 50;
+        const default_height = 20;
+        const default_padding = 10;
+
+        pub fn init(x: u32, y: u32) Brick {
+            return .{
+                .color = Sdl.SDL_Color{ .r = 0, .g = 0xff, .b = 0xff, .a = 0 },
+                .rect = Sdl.SDL_Rect{
+                    .x = @intCast(x),
+                    .y = @intCast(y),
+                    .w = Brick.default_width,
+                    .h = Brick.default_height,
+                },
+                .alive = true,
+            };
+        }
+    };
+
     pub fn init() !Game {
         if (Sdl.SDL_Init(Sdl.SDL_INIT_VIDEO) < 0) {
             return error.SdlInitError;
@@ -112,7 +156,7 @@ const Game = struct {
             .bar = bar,
             .ball = Ball.init(x + @divTrunc(w, 2) - @divTrunc(Ball.default_size, 2), y - Ball.default_size),
             .options = options,
-            .state = State.init(),
+            .state = try State.init(),
             .renderer = renderer,
         };
     }
@@ -128,16 +172,6 @@ const Game = struct {
     pub fn handleInput(self: *Game) void {
         const keys = Sdl.SDL_GetKeyboardState(null);
 
-        if (keys[Sdl.SDL_SCANCODE_SPACE] == 1) {
-            self.state.started = true;
-            self.ball.dx = 1;
-            self.ball.dy = -1;
-        }
-
-        if (!self.state.started) {
-            return;
-        }
-
         // Determine the bar's direction
         self.bar.dx = 0;
         if (keys[Sdl.SDL_SCANCODE_A] == 1) {
@@ -145,6 +179,12 @@ const Game = struct {
         }
         if (keys[Sdl.SDL_SCANCODE_D] == 1) {
             self.bar.dx += 1;
+        }
+
+        if (self.bar.dx != 0 and !self.state.started) {
+            self.ball.dy = -1;
+            self.ball.dx = self.bar.dx;
+            self.state.started = true;
         }
     }
 
@@ -181,8 +221,21 @@ const Game = struct {
             self.ball.dy *= -1;
         }
 
+        // TODO: Fix horizontal collision bug
         if (Sdl.SDL_HasIntersection(&self.bar.rect, &self.ball.rect) == 1) {
             self.ball.dy *= -1;
+        }
+
+        for (0..self.state.bricks.items.len, self.state.bricks.items) |i, *brick| {
+            if (!brick.alive) {
+                continue;
+            }
+
+            if (Sdl.SDL_HasIntersection(&self.ball.rect, &brick.rect) == 1) {
+                std.log.debug("brick {d} is dead\n", .{i});
+                brick.*.alive = false;
+                self.ball.dy *= -1;
+            }
         }
     }
 
@@ -197,6 +250,16 @@ const Game = struct {
         // Draw the ball
         _ = Sdl.SDL_SetRenderDrawColor(self.renderer, 0xff, 0xff, 0xff, 0);
         _ = Sdl.SDL_RenderFillRect(self.renderer, &self.ball.rect);
+
+        // Draw the bricks
+        for (self.state.bricks.items) |brick| {
+            if (!brick.alive) {
+                continue;
+            }
+
+            _ = Sdl.SDL_SetRenderDrawColor(self.renderer, brick.color.r, brick.color.g, brick.color.b, brick.color.a);
+            _ = Sdl.SDL_RenderFillRect(self.renderer, &brick.rect);
+        }
 
         Sdl.SDL_RenderPresent(self.renderer);
     }
