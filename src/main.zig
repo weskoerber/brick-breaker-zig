@@ -23,16 +23,16 @@ const Game = struct {
 
             const rows = 3;
             std.log.debug("Initializing {d} bricks\n", .{num * rows});
-            var posY: u32 = Brick.default_padding;
-            var posX: u32 = Brick.default_padding;
+            var pos_y: u32 = Brick.default_padding;
+            var pos_x: u32 = Brick.default_padding;
             for (0..rows) |_| {
                 for (0..num) |_| {
-                    try bricklist.append(Brick.init(posX, posY));
-                    posX += Brick.default_width + Brick.default_padding;
+                    try bricklist.append(Brick.init(pos_x, pos_y));
+                    pos_x += Brick.default_width + Brick.default_padding;
                 }
 
-                posY += Brick.default_height + Brick.default_padding;
-                posX = Brick.default_padding;
+                pos_y += Brick.default_height + Brick.default_padding;
+                pos_x = Brick.default_padding;
             }
 
             return .{
@@ -224,6 +224,9 @@ const Game = struct {
         // TODO: Fix horizontal collision bug
         if (Sdl.SDL_HasIntersection(&self.bar.rect, &self.ball.rect) == 1) {
             self.ball.dy *= -1;
+
+            const bar_middle = self.bar.rect.x + @divTrunc(self.bar.rect.w, 2);
+            self.ball.dx = if (self.ball.rect.x < bar_middle) -1 else 1;
         }
 
         for (0..self.state.bricks.items.len, self.state.bricks.items) |i, *brick| {
